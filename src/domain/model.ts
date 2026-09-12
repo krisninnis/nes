@@ -104,6 +104,15 @@ export interface Constraint {
   active: boolean;
 }
 
+export interface EngineeringMinute {
+  id: Id;
+  at: IsoTimestamp;
+  sourceAssessmentEventId: Id;
+  learning: string;
+  applicabilityAndLimits: string;
+  remainingUncertainty: string;
+}
+
 type EventMeta = { id: Id; at: IsoTimestamp };
 
 export type EngineeringEvent = EventMeta & (
@@ -119,6 +128,7 @@ export type EngineeringEvent = EventMeta & (
   | { kind: "verification.recorded"; value: VerificationRun }
   | { kind: "constraint.created"; value: Constraint }
   | { kind: "constraint.set_active"; constraintId: Id; active: boolean; reason: string }
+  | { kind: "minute.recorded"; sourceAssessmentEventId: Id; learning: string; applicabilityAndLimits: string; remainingUncertainty: string }
 );
 
 export type EventDraft = EngineeringEvent extends infer Event
@@ -137,6 +147,7 @@ export interface EngineeringView {
   repositoryStates: RepositoryState[];
   verificationRuns: VerificationRun[];
   constraints: Constraint[];
+  minutes: EngineeringMinute[];
 }
 
 export const emptyView = (): EngineeringView => ({
@@ -149,4 +160,5 @@ export const emptyView = (): EngineeringView => ({
   repositoryStates: [],
   verificationRuns: [],
   constraints: [],
+  minutes: [],
 });

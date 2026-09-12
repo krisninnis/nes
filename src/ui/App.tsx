@@ -3,12 +3,14 @@ import { appendEvent, makeEvent, replayEvents } from "../domain/engine";
 import { loadLocalHistory, saveLocalHistory, serializeHistory } from "../domain/storage";
 import type {
   ClaimStatus, Constraint, EngineeringEvent, EngineeringSession,
-  EventDraft, Evidence, Gate, GateStatus, Id, Project,
+  EngineeringMinute, EventDraft, Evidence, Gate, GateStatus, Id, Project,
 } from "../domain/model";
+
+type GateAssessmentEvent = Extract<EngineeringEvent, { kind: "gate.transitioned" }>;
 
 type Section =
   | "Overview" | "Projects" | "Sessions" | "Gates" | "Evidence"
-  | "Claims" | "Decisions" | "Verification" | "Repository"
+  | "Claims" | "Decisions" | "Engineering Minutes" | "Verification" | "Repository"
   | "Constraints" | "History" | "NES Principles";
 
 const navigation: { label: Section; marker: string }[] = [
@@ -19,6 +21,7 @@ const navigation: { label: Section; marker: string }[] = [
   { label: "Evidence", marker: "◫" },
   { label: "Claims", marker: "◎" },
   { label: "Decisions", marker: "⌁" },
+  { label: "Engineering Minutes", marker: "✎" },
   { label: "Verification", marker: "✓" },
   { label: "Repository", marker: "⌘" },
   { label: "Constraints", marker: "⊘" },
@@ -100,6 +103,7 @@ export function App() {
   const [events, setEvents] = useState<EngineeringEvent[]>(initialHistory.status === "ready" ? initialHistory.events : []);
   const [section, setSection] = useState<Section>("Overview");
   const [selectedProjectId, setSelectedProjectId] = useState<Id>(initialHistory.status === "ready" ? replayEvents(initialHistory.events).projects[0]?.id ?? "" : "");
+  const [selectedAssessmentEventId, setSelectedAssessmentEventId] = useState<Id>("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState(initialHistory.status === "error" ? initialHistory.message : "");
   const view = useMemo(() => replayEvents(events), [events]);
@@ -117,6 +121,16 @@ export function App() {
   const activeGate = gates.find((item) => item.sessionId === activeSession?.id && item.status === "ACTIVE");
   const lastPassingGate = [...gates].reverse().find((item) => item.status === "PASS");
   const latestRepositoryState = repositoryStates.at(-1);
+  const assessmentEvents = events.filter((item): item is GateAssessmentEvent => item.kind === "gate.transitioned");
+  const eligibleAssessments = assessmentEvents.filter((item) =>
+    ["PASS", "FAIL", "BLOCKED"].includes(item.status) && gates.some((gate) => gate.id === item.gateId));
+  const selectedAssessment = eligibleAssessments.find((item) => item.id === selectedAssessmentEventId);
+  const selectedAssessmentGate = gates.find((gate) => gate.id === selectedAssessment?.gateId);
+  const minuteEntries = view.minutes.flatMap((minute) => {
+    const source = eligibleAssessments.find((item) => item.id === minute.sourceAssessmentEventId);
+    const gate = gates.find((item) => item.id === source?.gateId);
+    return source && gate ? [{ minute, source, gate }] : [];
+  });
 
   const commit = (draft: EventDraft): boolean => {
     try {
@@ -302,6 +316,41 @@ export function App() {
           </Composer>}
         </div>}
 
+        {section === "Engineering Minutes" && <div className="section-stack">
+          <Panel eyebrow="EVIDENCE → ASSESSMENT → LEARNING" title="A historical reflection, not a new proof claim">
+            <p>Each Minute is recorded by a human against one exact PASS, FAIL, or BLOCKED gate assessment. NES preserves the original reason and evidence count; it cannot decide whether the lesson follows or transfers elsewhere.</p>
+          </Panel>
+          {minuteEntries.length ? [...minuteEntries].reverse().map(({ minute, source, gate }) =>
+            <MinuteRecord key={minute.id} minute={minute} source={source} gate={gate}
+              latest={[...assessmentEvents].reverse().find((item) => item.gateId === gate.id)} evidence={evidence} />)
+            : <Empty text="No Engineering Minutes recorded for this project. A Minute is a human reflection on a historical assessment, not evidence or a principle." />}
+          {eligibleAssessments.length > 0 && <Composer title="Record Engineering Minute" submitLabel="Record Minute" onSubmit={(data) => {
+            if (commit({ kind: "minute.recorded", sourceAssessmentEventId: read(data, "sourceAssessmentEventId"),
+              learning: read(data, "learning"), applicabilityAndLimits: read(data, "applicabilityAndLimits"),
+              remainingUncertainty: read(data, "remainingUncertainty") })) setSelectedAssessmentEventId("");
+          }}>
+            <label className="field"><span>Historical gate assessment</span>
+              <select name="sourceAssessmentEventId" required value={selectedAssessment?.id ?? ""} onChange={(event) => setSelectedAssessmentEventId(event.target.value)}>
+                <option value="">Choose a PASS, FAIL, or BLOCKED assessment</option>
+                {eligibleAssessments.map((item) => <option key={item.id} value={item.id}>
+                  {gates.find((gate) => gate.id === item.gateId)?.identifier} · {item.status} · {showDate(item.at)} · {item.evidenceIds.length} evidence references
+                </option>)}
+              </select>
+            </label>
+            {selectedAssessment && selectedAssessmentGate && <div className="minute-source">
+              <span className="eyebrow">SOURCE ASSESSMENT · {selectedAssessment.id}</span>
+              <h4>{selectedAssessmentGate.identifier} · {selectedAssessmentGate.question}</h4>
+              <Badge value={selectedAssessment.status} />
+              <p>{selectedAssessment.conclusion}</p>
+              <p className="minute-count">{selectedAssessment.evidenceIds.length} evidence references</p>
+              {selectedAssessment.evidenceIds.length === 0 && <p className="minute-caution">No evidence was cited. The assessment reason is a human record, not independent proof of the hypothesis or the blockage.</p>}
+            </div>}
+            <Area label="What did you learn from this assessment?" name="learning" required placeholder="Keep the lesson tied to the recorded assessment, not a reconstructed memory." />
+            <Area label="Where may it apply, and what are its limits?" name="applicabilityAndLimits" required placeholder="Project-specific is a valid scope; do not claim a universal rule." />
+            <Area label="What remains uncertain?" name="remainingUncertainty" required placeholder="State what this assessment did not establish." />
+          </Composer>}
+        </div>}
+
         {section === "Verification" && <div className="section-stack">
           {verificationRuns.length ? [...verificationRuns].reverse().map((item) => <Panel key={item.id} eyebrow={`RUN / ${showDate(item.ranAt)}`} title={item.command}>
             <Badge value={item.result} /><div className="detail-grid"><Detail label="Exact code SHA" value={item.codeSha} /><Detail label="Passed" value={item.checksPassed} /><Detail label="Failed" value={item.checksFailed} /></div>
@@ -379,6 +428,7 @@ const sectionIntro: Record<Section, string> = {
   Evidence: "Preserve observations, sources, exact identities, and quotations without silently rewriting them.",
   Claims: "Separate what is asserted from what evidence actually proves.",
   Decisions: "Record human choices, rationale, rejected alternatives, and the evidence considered.",
+  "Engineering Minutes": "Preserve what the engineer learned from an exact historical gate assessment, with limits and uncertainty.",
   Verification: "Bind test and workflow results to exact code identity wherever known.",
   Repository: "Capture branch, HEAD, remote identity, and dirty state as observed facts.",
   Constraints: "Make stop conditions visible before the next action is taken.",
@@ -394,6 +444,27 @@ function EvidenceRefs({ items }: { items: Evidence[] }) {
   return <div className="evidence-refs"><span className="eyebrow">EVIDENCE REFERENCES</span>
     {items.length ? items.map((item) => <span key={item.id} className="evidence-ref">◫ {item.description}</span>) : <span className="muted small">None recorded</span>}
   </div>;
+}
+
+function MinuteRecord({ minute, source, gate, latest, evidence }: {
+  minute: EngineeringMinute; source: GateAssessmentEvent; gate: Gate;
+  latest?: GateAssessmentEvent; evidence: Evidence[];
+}) {
+  const reassessed = latest?.id !== source.id;
+  return <Panel eyebrow={`HUMAN-RECORDED MINUTE / ${showDate(minute.at)}`} title={minute.learning}>
+    <div className="gate-top"><Badge value={source.status} /><span className="gate-id">{gate.identifier} · {gate.question}</span></div>
+    {reassessed && <p className="minute-caution" role="status">Historical assessment: this gate has since been reassessed. Current gate state: {gate.status}. This Minute remains attached to its original source, not the current conclusion.</p>}
+    <div className="detail-grid">
+      <Detail label="Historical source conclusion" value={source.conclusion} />
+      <Detail label="Applicability and limits" value={minute.applicabilityAndLimits} />
+      <Detail label="Remaining uncertainty" value={minute.remainingUncertainty} />
+      <Detail label="Source assessment event" value={`${source.id} · ${showDate(source.at)}`} />
+    </div>
+    <p className="minute-count">{source.evidenceIds.length} evidence references</p>
+    {source.evidenceIds.length === 0 && <p className="minute-caution">No evidence was cited by this assessment. Its recorded reason is not independent proof that the hypothesis is false or that the blockage is objectively established.</p>}
+    <EvidenceRefs items={source.evidenceIds.map((id) => evidence.find((item) => item.id === id)).filter((item): item is Evidence => Boolean(item))} />
+    <p className="muted small">NES records this reflection; it does not authenticate evidence, certify the lesson, or promote it to a principle.</p>
+  </Panel>;
 }
 
 function Overview({ project, activeSession, activeGate, gates, lastPassingGate, constraints, claims, evidence, repositoryState, onNavigate }: {

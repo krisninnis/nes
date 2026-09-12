@@ -23,7 +23,7 @@ const uniqueId = (view: EngineeringView, id: Id): void => {
   const allIds = [
     ...view.projects, ...view.sessions, ...view.gates, ...view.evidence,
     ...view.claims, ...view.decisions, ...view.repositoryStates,
-    ...view.verificationRuns, ...view.constraints,
+    ...view.verificationRuns, ...view.constraints, ...view.minutes,
   ].map((record) => record.id);
   if (allIds.includes(id)) throw new DomainError(`Record ${id} already exists.`);
 };
@@ -85,13 +85,12 @@ const allowedGateTransitions: Record<GateStatus, GateStatus[]> = {
 // later event changes the current status.
 export const replayEvents = (events: EngineeringEvent[]): EngineeringView => {
   const view = emptyView();
-  const eventIds = new Set<string>();
+  const priorEvents = new Map<Id, EngineeringEvent>();
 
   for (const event of events) {
-    if (!event.id || !event.at || eventIds.has(event.id)) {
+    if (!event.id || !event.at || priorEvents.has(event.id)) {
       throw new DomainError("Event IDs and timestamps must exist and event IDs must be unique.");
     }
-    eventIds.add(event.id);
 
     switch (event.kind) {
       case "project.created":
@@ -206,9 +205,38 @@ export const replayEvents = (events: EngineeringEvent[]): EngineeringView => {
         constraint.active = event.active;
         break;
       }
+      case "minute.recorded": {
+        uniqueId(view, event.id);
+        const source = priorEvents.get(event.sourceAssessmentEventId);
+        if (!source) throw new DomainError("Source assessment must exist earlier in history.");
+        if (source.kind !== "gate.transitioned") {
+          throw new DomainError("An Engineering Minute must reference a gate assessment event.");
+        }
+        if (!["PASS", "FAIL", "BLOCKED"].includes(source.status)) {
+          throw new DomainError("An Engineering Minute requires a PASS, FAIL, or BLOCKED assessment.");
+        }
+        const gate = view.gates.find((item) => item.id === source.gateId);
+        if (!gate) throw new DomainError("Source assessment gate does not exist.");
+        const session = view.sessions.find((item) => item.id === gate.sessionId);
+        if (!session) throw new DomainError("Source assessment session does not exist.");
+        projectExists(view, session.projectId);
+        requireText(event.learning, "Learning");
+        requireText(event.applicabilityAndLimits, "Applicability and limits");
+        requireText(event.remainingUncertainty, "Remaining uncertainty");
+        view.minutes.push({
+          id: event.id,
+          at: event.at,
+          sourceAssessmentEventId: event.sourceAssessmentEventId,
+          learning: event.learning,
+          applicabilityAndLimits: event.applicabilityAndLimits,
+          remainingUncertainty: event.remainingUncertainty,
+        });
+        break;
+      }
       default:
         throw new DomainError("Unknown event kind; local history was not changed.");
     }
+    priorEvents.set(event.id, event);
   }
 
   return view;
