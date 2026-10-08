@@ -179,3 +179,33 @@ This capability extends the existing NES foundation:
 - Measure progress by uncertainty removed.
 
 The learning system must preserve those constraints rather than bypass them.
+
+## Incremental implementation roadmap (added 2026-10-08)
+
+The current NES dashboard already supports human-entered Engineering Minutes linked to historical terminal gate assessments, plus local event-history export. It does **not** automatically read Git repositories, collect raw gate evidence, verify provenance, retrieve lessons for agents, or run Android emulators. Preserve that distinction between implemented functionality and future design.
+
+1. **Knowledge indexing, documentation-first:** maintain discoverable links among cases, ADRs, lessons, patterns and raw evidence pointers. Capture status, applicability, limits, contradictions and reconsideration conditions.
+2. **Pre-gate retrieval, human reviewed:** surface relevant engineering DNA before planning the next bounded experiment. Require explicit relevance assessment; never let retrieved notes override current repository/runtime evidence.
+3. **Provenance and archival:** define opt-in import from local evidence, with content hashes and redaction review. Keep source reports immutable; never silently copy personal GPS trails, credentials or private databases into public Git.
+4. **Environment verification adapters:** after NinFit's disposable emulator gates provide real evidence, extract the smallest reusable isolation, identity, targeting, execution and cleanup contract. See ADR-002.
+5. **Learning evaluation:** compare decisions, regressions caught, time-to-reproduce and uncertainty removed across real cases, with honest confounders. Do not reward gate count for its own sake.
+
+### Engineering DNA record, proposed minimum fields
+
+```text
+record ID / type / maturity / date
+source project / worktree / gate / commit
+raw evidence locations + availability + hashes (where verified)
+observation -> finding -> decision -> limits
+frozen authority / actual commands / executed vs NOT RUN
+environment identity / isolation constraints
+contradictions / superseded-by / reconsideration trigger
+reusable applicability / next unverified boundary
+human reviewer and promotion rationale (if promoted)
+```
+
+This is a proposed schema, not a claim that NES currently persists all these fields. Never silently translate `BLOCKED`, `UNKNOWN`, `NOT RUN` or expected RED into PASS.
+
+### Avoid process overhead without learning
+
+Use the smallest gate that meaningfully reduces uncertainty. Periodically ask whether the next gate tests real behaviour or only adds paperwork. Promote reusable lessons only after evaluating their scope and contrary evidence.
