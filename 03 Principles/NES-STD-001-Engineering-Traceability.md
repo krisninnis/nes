@@ -1,9 +1,9 @@
 # NES-STD-001: Engineering Traceability, Code Documentation and Handover
 
-**Status:** Proposed governing standard, pending owner review and adoption  
+**Status:** Adopted governing standard, owner-approved 2026-10-10  
 **Version:** 1.0, 2026-10-10  
 **Scope:** All NES-governed projects, including Ningle Entertainment, Ninglecode, NingleFit and the NES Developer Test Centre.  
-**Authority:** Human project owner. This proposal does not authorise implementation, change existing gates, or supersede frozen evidence.
+**Authority:** Human project owner. Adoption of this standard does not authorise implementation, change existing gates, or supersede frozen evidence.
 
 ## Purpose
 
@@ -88,4 +88,4 @@ Applicable completion criteria include reviewed code, accurate comments, reprodu
 
 Adoption in each project requires an explicit approved change. Project agent instructions such as `AGENTS.md` should link to this standard without overwriting stricter project rules. Changes to this standard require a versioned, reviewed amendment, rationale and explicit owner approval.
 
-**This document is a governance proposal; its presence in Git is not evidence that all repositories already comply or that an implementation gate was authorised.**
+**This standard is adopted governance; its presence in Git is not evidence that all repositories already comply or that an implementation gate was authorised.**
